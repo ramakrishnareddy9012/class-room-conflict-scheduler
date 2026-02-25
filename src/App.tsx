@@ -309,6 +309,9 @@ export default function App() {
   const [conflicts, setConflicts] = React.useState<Conflict[]>([]);
   const [stats, setStats] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
+  const [toast, setToast] = React.useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [filterStatus, setFilterStatus] = React.useState<'all' | 'available' | 'occupied' | 'conflict'>('all');
   const [roomModal, setRoomModal] = React.useState<{
     isOpen: boolean;
     mode: 'add' | 'edit';
@@ -330,6 +333,8 @@ export default function App() {
       setRoomModal({ isOpen: false, mode: 'add', room: {} });
       const res = await fetch('/api/rooms');
       setRooms(await res.json());
+      setToast({ message: `Room ${roomModal.mode === 'add' ? 'registered' : 'updated'} successfully`, type: 'success' });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -338,7 +343,14 @@ export default function App() {
     const response = await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
     if (response.ok) {
       setRooms(prev => prev.filter(r => r.id !== id));
+      setToast({ message: 'Room deleted successfully', type: 'success' });
+      setTimeout(() => setToast(null), 3000);
     }
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
   React.useEffect(() => {
@@ -419,7 +431,11 @@ export default function App() {
               <p className="text-xs font-bold truncate">Alex Rivera</p>
               <p className="text-[10px] text-slate-500 truncate">System Registrar</p>
             </div>
-            <LogOut size={14} className="text-slate-500 cursor-pointer hover:text-primary" />
+            <LogOut 
+              size={14} 
+              className="text-slate-500 cursor-pointer hover:text-primary" 
+              onClick={() => showToast('Logging out...')}
+            />
           </div>
         </div>
       </aside>
@@ -437,10 +453,15 @@ export default function App() {
               <input 
                 type="text" 
                 placeholder="Search resources..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-card-dark border border-border-dark rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none w-64"
               />
             </div>
-            <button className="p-2 bg-card-dark border border-border-dark rounded-xl text-slate-400 hover:text-primary transition-colors relative">
+            <button 
+              onClick={() => showToast('No new notifications')}
+              className="p-2 bg-card-dark border border-border-dark rounded-xl text-slate-400 hover:text-primary transition-colors relative"
+            >
               <Bell size={20} />
               <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-card-dark" />
             </button>
@@ -562,7 +583,12 @@ export default function App() {
                           </div>
                           <span className="text-sm font-medium">{report.name}</span>
                         </div>
-                        <button className="text-primary hover:underline text-xs font-bold">Download</button>
+                        <button 
+                          onClick={() => showToast(`Downloading ${report.name}...`)}
+                          className="text-primary hover:underline text-xs font-bold"
+                        >
+                          Download
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -586,9 +612,24 @@ export default function App() {
                       <Monitor className="text-primary" size={24} /> Room Occupancy
                     </h3>
                     <div className="flex bg-slate-800 rounded-lg p-1">
-                      <button className="px-4 py-1.5 text-[10px] font-bold bg-primary text-white rounded-md">All Rooms</button>
-                      <button className="px-4 py-1.5 text-[10px] font-bold text-slate-400 hover:text-white">Vacant</button>
-                      <button className="px-4 py-1.5 text-[10px] font-bold text-slate-400 hover:text-white">Occupied</button>
+                      <button 
+                        onClick={() => setFilterStatus('all')}
+                        className={cn("px-4 py-1.5 text-[10px] font-bold rounded-md transition-all", filterStatus === 'all' ? "bg-primary text-white" : "text-slate-400 hover:text-white")}
+                      >
+                        All Rooms
+                      </button>
+                      <button 
+                        onClick={() => setFilterStatus('available')}
+                        className={cn("px-4 py-1.5 text-[10px] font-bold rounded-md transition-all", filterStatus === 'available' ? "bg-primary text-white" : "text-slate-400 hover:text-white")}
+                      >
+                        Vacant
+                      </button>
+                      <button 
+                        onClick={() => setFilterStatus('occupied')}
+                        className={cn("px-4 py-1.5 text-[10px] font-bold rounded-md transition-all", filterStatus === 'occupied' ? "bg-primary text-white" : "text-slate-400 hover:text-white")}
+                      >
+                        Occupied
+                      </button>
                     </div>
                   </div>
                   <div className="relative">
@@ -596,12 +637,17 @@ export default function App() {
                     <input 
                       type="text" 
                       placeholder="Find room..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       className="bg-card-dark border border-border-dark rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-1 focus:ring-primary outline-none w-48"
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {rooms.map(room => (
+                  {rooms
+                    .filter(r => filterStatus === 'all' || r.status === filterStatus)
+                    .filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(room => (
                     <div key={room.id}>
                       <RoomCard room={room} />
                     </div>
@@ -614,17 +660,21 @@ export default function App() {
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="font-bold flex items-center gap-2"><Calendar size={18} className="text-primary" /> Daily Schedule</h3>
                   <div className="flex gap-2">
-                    <button className="p-1 hover:text-primary transition-colors"><ChevronRight size={16} className="rotate-180" /></button>
-                    <button className="p-1 hover:text-primary transition-colors"><ChevronRight size={16} /></button>
+                    <button onClick={() => showToast('Previous day')} className="p-1 hover:text-primary transition-colors"><ChevronRight size={16} className="rotate-180" /></button>
+                    <button onClick={() => showToast('Next day')} className="p-1 hover:text-primary transition-colors"><ChevronRight size={16} /></button>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-6 gap-2 mb-8">
                   {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day, i) => (
-                    <div key={day} className={cn(
-                      "flex flex-col items-center p-2 rounded-xl transition-colors cursor-pointer",
-                      i === 1 ? "bg-primary text-white" : "hover:bg-slate-800 text-slate-500"
-                    )}>
+                    <div 
+                      key={day} 
+                      onClick={() => showToast(`Selected ${day} ${23 + i}`)}
+                      className={cn(
+                        "flex flex-col items-center p-2 rounded-xl transition-colors cursor-pointer",
+                        i === 1 ? "bg-primary text-white" : "hover:bg-slate-800 text-slate-500"
+                      )}
+                    >
                       <span className="text-[8px] font-bold uppercase">{day}</span>
                       <span className="text-sm font-bold">{23 + i}</span>
                     </div>
@@ -708,7 +758,10 @@ export default function App() {
                   ))}
                 </div>
 
-                <button className="w-full py-3 mt-12 border border-primary/20 text-primary text-xs font-bold rounded-xl hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
+                <button 
+                  onClick={() => setActiveTab('conflicts')}
+                  className="w-full py-3 mt-12 border border-primary/20 text-primary text-xs font-bold rounded-xl hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+                >
                   <AlertTriangle size={14} /> Resolve Conflicts
                 </button>
               </div>
@@ -782,7 +835,10 @@ export default function App() {
                                     </div>
                                   )}
                                   {hasEvent && (
-                                    <div className="bg-primary/10 border-l-4 border-primary p-3 rounded-lg h-full">
+                                    <div 
+                                      onClick={() => showToast('Session: CS101 - Advanced Algorithms')}
+                                      className="bg-primary/10 border-l-4 border-primary p-3 rounded-lg h-full cursor-pointer hover:bg-primary/20 transition-all"
+                                    >
                                       <p className="text-[8px] font-bold text-primary uppercase mb-1">Batch 11 - CS101</p>
                                       <p className="text-[10px] font-bold">Advanced Algorithms</p>
                                       <p className="text-[8px] text-slate-500 mt-1">Dr. Sarah Connor • Lab A</p>
@@ -792,7 +848,8 @@ export default function App() {
                                     <motion.div 
                                       initial={{ scale: 0.95 }}
                                       animate={{ scale: 1 }}
-                                      className="bg-amber-500/10 border border-amber-500 p-3 rounded-lg h-full shadow-lg shadow-amber-500/10"
+                                      onClick={() => showToast('Conflict detected: Batch 11 vs Batch 14', 'error')}
+                                      className="bg-amber-500/10 border border-amber-500 p-3 rounded-lg h-full shadow-lg shadow-amber-500/10 cursor-pointer hover:bg-amber-500/20 transition-all"
                                     >
                                       <div className="flex items-center gap-1 text-[8px] font-bold text-amber-500 uppercase mb-1">
                                         <AlertTriangle size={10} /> Conflict Detected
@@ -828,7 +885,7 @@ export default function App() {
                     <p className="text-xs text-slate-400 mb-4">Overlapping: Machine Learning Lab</p>
                     <div className="bg-slate-800/50 p-3 rounded-xl flex items-center justify-between mb-6">
                       <span className="text-[10px] font-bold text-emerald-500 uppercase">New Slot: 16:00 - 18:00</span>
-                      <button className="text-primary text-[10px] font-bold hover:underline">Apply</button>
+                      <button onClick={() => showToast('Slot suggestion applied')} className="text-primary text-[10px] font-bold hover:underline">Apply</button>
                     </div>
                   </motion.div>
                 </div>
@@ -894,10 +951,12 @@ export default function App() {
                       <input 
                         type="text" 
                         placeholder="Filter by building or ID..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         className="bg-background-dark border border-border-dark rounded-xl pl-9 pr-4 py-2 text-xs outline-none focus:ring-1 focus:ring-primary w-64"
                       />
                     </div>
-                    <button className="p-2 bg-slate-800 border border-border-dark rounded-xl text-slate-400 hover:text-white transition-colors">
+                    <button onClick={() => showToast('Advanced filters opened')} className="p-2 bg-slate-800 border border-border-dark rounded-xl text-slate-400 hover:text-white transition-colors">
                       <Filter size={18} />
                     </button>
                   </div>
@@ -915,7 +974,9 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-dark">
-                      {rooms.map(room => (
+                      {rooms
+                        .filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.toLowerCase().includes(searchQuery.toLowerCase()) || r.building.toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map(room => (
                         <tr key={room.id} className="hover:bg-slate-800/20 transition-colors group">
                           <td className="p-4">
                             <div className="flex items-center gap-3">
@@ -982,7 +1043,7 @@ export default function App() {
                       <p className="text-xs text-slate-500 mt-1">Our AI has suggested 3 improvements to today's room allocation.</p>
                     </div>
                   </div>
-                  <button className="px-6 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition-all">Review Suggestions</button>
+                  <button onClick={() => setActiveTab('conflicts')} className="px-6 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition-all">Review Suggestions</button>
                 </div>
                 <div className="bg-card-dark border border-border-dark p-6 rounded-2xl">
                   <h4 className="font-bold mb-4">Recently Viewed</h4>
@@ -1075,13 +1136,13 @@ export default function App() {
                       <p className="text-xs font-bold text-primary uppercase mb-2">Suggestion #1</p>
                       <p className="text-sm font-bold mb-4">Move "Advanced Algorithms" to RM-105</p>
                       <p className="text-xs text-slate-500 mb-6">RM-105 has 120 seats and is currently vacant during this slot. This would resolve the conflict in RM-101.</p>
-                      <button className="w-full py-3 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all">Apply Resolution</button>
+                      <button onClick={() => showToast('Resolution applied successfully')} className="w-full py-3 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all">Apply Resolution</button>
                     </div>
                     <div className="bg-card-dark border border-border-dark p-6 rounded-2xl">
                       <p className="text-xs font-bold text-emerald-500 uppercase mb-2">Optimization #1</p>
                       <p className="text-sm font-bold mb-4">Swap RM-102 and RM-201</p>
                       <p className="text-xs text-slate-500 mb-6">Batch 11 has a following class in South Wing. Swapping would reduce student travel time by 15%.</p>
-                      <button className="w-full py-3 border border-emerald-500/30 text-emerald-500 text-xs font-bold rounded-xl hover:bg-emerald-500/5 transition-all">Optimize Route</button>
+                      <button onClick={() => showToast('Route optimized')} className="w-full py-3 border border-emerald-500/30 text-emerald-500 text-xs font-bold rounded-xl hover:bg-emerald-500/5 transition-all">Optimize Route</button>
                     </div>
                   </div>
                 </div>
@@ -1097,7 +1158,7 @@ export default function App() {
                         <p className="text-[10px] text-slate-500 mb-4">{c.description}</p>
                         <div className="flex gap-2">
                           <button onClick={() => resolveConflict(c.id)} className="flex-1 py-2 bg-primary text-white text-[10px] font-bold rounded-lg">Auto-Fix</button>
-                          <button className="flex-1 py-2 bg-slate-700 text-white text-[10px] font-bold rounded-lg">Manual</button>
+                          <button onClick={() => showToast('Manual resolution mode active')} className="flex-1 py-2 bg-slate-700 text-white text-[10px] font-bold rounded-lg">Manual</button>
                         </div>
                       </div>
                     ))}
@@ -1207,8 +1268,8 @@ export default function App() {
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="text-lg font-bold">Infrastructure Visualization</h3>
                   <div className="flex gap-2">
-                    <button className="px-4 py-1.5 bg-primary text-white text-[10px] font-bold rounded-lg">Node View</button>
-                    <button className="px-4 py-1.5 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg">Grid View</button>
+                    <button onClick={() => showToast('Node view active')} className="px-4 py-1.5 bg-primary text-white text-[10px] font-bold rounded-lg">Node View</button>
+                    <button onClick={() => showToast('Grid view active')} className="px-4 py-1.5 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg">Grid View</button>
                   </div>
                 </div>
                 <div className="grid grid-cols-8 md:grid-cols-12 lg:grid-cols-16 gap-4">
@@ -1218,6 +1279,7 @@ export default function App() {
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: i * 0.01 }}
+                      onClick={() => showToast(`Node ${i + 1} status: ${i % 7 === 0 ? 'Critical' : i % 5 === 0 ? 'Warning' : 'Healthy'}`)}
                       className={cn(
                         "aspect-square rounded-lg border flex items-center justify-center transition-all cursor-pointer hover:scale-110",
                         i % 7 === 0 ? "bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-500/20" : 
@@ -1234,11 +1296,112 @@ export default function App() {
               </div>
             </motion.div>
           )}
+
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="max-w-4xl space-y-8"
+            >
+              <div className="bg-card-dark border border-border-dark rounded-3xl overflow-hidden">
+                <div className="p-8 border-b border-border-dark bg-slate-800/30">
+                  <h3 className="text-xl font-bold">System Configuration</h3>
+                  <p className="text-sm text-slate-500 mt-1">Manage global scheduling parameters and AI engine sensitivity.</p>
+                </div>
+                <div className="p-8 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-primary uppercase tracking-widest">Scheduling Engine</h4>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold">Auto-Resolve Conflicts</p>
+                            <p className="text-[10px] text-slate-500">Automatically apply AI suggestions for minor overlaps.</p>
+                          </div>
+                          <div className="w-12 h-6 bg-primary rounded-full relative cursor-pointer">
+                            <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold">Strict Capacity Enforcement</p>
+                            <p className="text-[10px] text-slate-500">Prevent booking if batch size exceeds room capacity.</p>
+                          </div>
+                          <div className="w-12 h-6 bg-slate-700 rounded-full relative cursor-pointer">
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest">AI Optimization</h4>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold">Travel Time Optimization</p>
+                            <p className="text-[10px] text-slate-500">Minimize student movement between buildings.</p>
+                          </div>
+                          <div className="w-12 h-6 bg-primary rounded-full relative cursor-pointer">
+                            <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold">Energy Saving Mode</p>
+                            <p className="text-[10px] text-slate-500">Consolidate classes to minimize HVAC usage.</p>
+                          </div>
+                          <div className="w-12 h-6 bg-slate-700 rounded-full relative cursor-pointer">
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-8 border-t border-border-dark">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Database Management</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <button onClick={() => showToast('Backup initiated...')} className="flex items-center justify-center gap-2 p-4 bg-slate-800 border border-border-dark rounded-2xl hover:bg-slate-700 transition-all">
+                        <Database size={18} className="text-primary" />
+                        <span className="text-xs font-bold">Backup DB</span>
+                      </button>
+                      <button onClick={() => showToast('Logs exported to CSV')} className="flex items-center justify-center gap-2 p-4 bg-slate-800 border border-border-dark rounded-2xl hover:bg-slate-700 transition-all">
+                        <FileText size={18} className="text-emerald-500" />
+                        <span className="text-xs font-bold">Export Logs</span>
+                      </button>
+                      <button onClick={() => showToast('Cache purged', 'error')} className="flex items-center justify-center gap-2 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl hover:bg-rose-500/20 transition-all text-rose-500">
+                        <Trash2 size={18} />
+                        <span className="text-xs font-bold">Purge Cache</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-primary/5 border border-primary/20 p-8 rounded-3xl flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold">Security & Access</h4>
+                    <p className="text-sm text-slate-500">Manage registrar permissions and API access tokens.</p>
+                  </div>
+                </div>
+                <button onClick={() => showToast('Access management panel opened')} className="px-6 py-3 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all">Manage Access</button>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
 
         {/* Floating Map Widget */}
         <div className="fixed bottom-8 right-8 group">
-          <button className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-2xl shadow-primary/40 hover:scale-110 transition-transform">
+          <button 
+            onClick={() => showToast('Campus map expanded')}
+            className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-2xl shadow-primary/40 hover:scale-110 transition-transform"
+          >
             <MapIcon size={24} />
           </button>
           <div className="absolute bottom-full right-0 mb-4 w-72 h-48 bg-card-dark border border-border-dark rounded-2xl shadow-2xl p-2 hidden group-hover:block overflow-hidden">
@@ -1259,6 +1422,21 @@ export default function App() {
       </main>
 
       <AnimatePresence>
+        {toast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={cn(
+              "fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border",
+              toast.type === 'success' ? "bg-emerald-500 border-emerald-400 text-white" : "bg-rose-500 border-rose-400 text-white"
+            )}
+          >
+            {toast.type === 'success' ? <ShieldCheck size={18} /> : <AlertTriangle size={18} />}
+            <span className="text-xs font-bold">{toast.message}</span>
+          </motion.div>
+        )}
+
         {roomModal.isOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
